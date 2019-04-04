@@ -4,7 +4,10 @@ module Main (main) where
 
 import           Data.Aeson
 import qualified Data.ByteString.Lazy as ByteString
+import           Data.Foldable
+import           Data.List
 import           Data.Monoid
+import           Text.Printf
 
 data Song = Song
     { songName :: String -- TODO: Rename to "name"
@@ -75,6 +78,26 @@ instance FromJSON Chord where
 main :: IO ()
 main = do
     json <- ByteString.readFile "samples/minor-blues.json"
-    print json
-    let result = eitherDecode json :: Either String Song
-    print result
+    case eitherDecode json of
+        Left e -> putStrLn $ "Error: " ++ e
+        Right song -> putStrLn $ renderSong song
+
+renderSong :: Song -> String
+renderSong song = concat (map renderSection (sections song))
+
+renderSection :: Section -> String
+renderSection section =
+    printf
+        ": %s\n%s\n\n"
+        (sectionName section)
+        (intercalate " " (map renderChord (chords section)))
+
+renderChord :: Chord -> String
+renderChord chord = case bass chord of
+    Nothing -> printf "%s%s" (root chord) (renderChordType $ chordType chord)
+    Just n -> printf "%s%s/%s" (root chord) (renderChordType $ chordType chord) n
+
+renderChordType :: String -> String
+renderChordType "Maj" = ""
+renderChordType "Min" = "m"
+renderChordType "7" = "7"
