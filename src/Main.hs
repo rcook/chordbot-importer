@@ -75,22 +75,67 @@ instance FromJSON Chord where
         <*> o .: "root"
         <*> o .:? "bass"
 
+----------
+
+data Beat = Beat
+    { chord :: Chord
+    } deriving Show
+
+type Measure = [Beat]
+
+type Line = [Measure]
+
+chunked :: Int -> [a] -> [[a]]
+chunked n items =
+    let h = take n items
+        t = drop n items
+    in case t of
+        [] -> [h]
+        _ -> h : chunked n t
+
 main :: IO ()
 main = do
     json <- ByteString.readFile "samples/minor-blues.json"
     case eitherDecode json of
         Left e -> putStrLn $ "Error: " ++ e
-        Right song -> putStrLn $ renderSong song
+        Right song -> putStrLn $ renderSong 4 4 song
 
-renderSong :: Song -> String
-renderSong song = concat (map renderSection (sections song))
+expandBeats :: Section -> [Beat]
+expandBeats = concatMap (\chord -> take (duration chord) (repeat $ Beat chord)) . chords
 
-renderSection :: Section -> String
-renderSection section =
+renderSong :: Int -> Int -> Song -> String
+renderSong beatsPerMeasure measuresPerLine song =
     printf
-        ": %s\n%s\n\n"
+        "# songName=%s\n\
+        \# tempo=%d\n\
+        \# beatsPerMeasure=%d\n\
+        \# measuresPerLine=%d\n\
+        \%s"
+        (songName song)
+        (tempo song)
+        beatsPerMeasure
+        measuresPerLine $ concat
+        (map (renderSection beatsPerMeasure measuresPerLine) (sections song))
+
+renderSection :: Int -> Int -> Section -> String
+renderSection beatsPerMeasure measuresPerLine section =
+    let beats = expandBeats section
+        measures = chunked beatsPerMeasure beats
+        lines = chunked measuresPerLine measures
+    in printf
+        ": %s\n%s\n"
         (sectionName section)
-        (intercalate " " (map renderChord (chords section)))
+        (renderLines lines)
+
+renderLines :: [Line] -> String
+renderLines = intercalate "\n" . map renderLine
+
+renderLine :: Line -> String
+renderLine = intercalate " " . map renderMeasure
+
+renderMeasure :: Measure -> String
+renderMeasure m =
+    intercalate "_" (map head (group (map (renderChord . chord) m)))
 
 renderChord :: Chord -> String
 renderChord chord = case bass chord of
